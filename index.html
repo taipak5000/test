@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sky 星を紡ぐ子どもたち - 赤闇・星のキャンドル獲得量計算ツール</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-gold: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-blue: #3b82f6;
+            --border-color: #334155;
+        }
+
+        .sky-shard-calculator {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            box-sizing: border-box;
+        }
+
+        .sky-shard-calculator * {
+            box-sizing: border-box;
+        }
+
+        .sky-title {
+            text-align: center;
+            font-size: 1.5rem;
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: var(--accent-gold);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .sky-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .sky-tab-btn {
+            flex: 1;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            padding: 10px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-radius: 8px;
+        }
+
+        .sky-tab-btn.active {
+            color: var(--text-main);
+            background-color: var(--border-color);
+        }
+
+        .sky-section {
+            display: none;
+        }
+
+        .sky-section.active {
+            display: block;
+        }
+
+        .sky-form-group {
+            margin-bottom: 15px;
+        }
+
+        .sky-label {
+            display: block;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .sky-select, .sky-input {
+            width: 100%;
+            padding: 12px;
+            background-color: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-main);
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .sky-select:focus, .sky-input:focus {
+            border-color: var(--accent-gold);
+        }
+
+        .sky-select option {
+            background-color: var(--card-bg);
+            color: var(--text-main);
+        }
+
+        .sky-result-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            border-left: 5px solid var(--accent-gold);
+        }
+
+        .sky-result-card.is-black {
+            border-left-color: var(--text-muted);
+        }
+
+        .sky-result-card.is-red {
+            border-left-color: var(--accent-red);
+        }
+
+        .sky-res-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .sky-res-row:last-child {
+            border-bottom: none;
+        }
+
+        .sky-res-val {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .sky-candle-badge {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #000;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 1.2rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .sky-badge-red {
+            background-color: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .sky-badge-black {
+            background-color: rgba(148, 163, 184, 0.2);
+            color: #cbd5e1;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .sky-info-text {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 15px;
+            line-height: 1.5;
+            background-color: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 6px;
+        }
+
+        .location-list {
+            margin-top: 10px;
+            padding-left: 20px;
+        }
+        .location-list li {
+            margin-bottom: 5px;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="sky-shard-calculator">
+    <div class="sky-title">
+        <span>☄️</span> Sky シャード＆星キャン計算ツール
+    </div>
+
+    <div class="sky-tabs">
+        <button class="sky-tab-btn active" onclick="switchSkyTab('date-tab')">📅 日付から予測</button>
+        <button class="sky-tab-btn" onclick="switchSkyTab('location-tab')">📍 場所から調べる</button>
+    </div>
+
+    <div id="date-tab" class="sky-section active">
+        <div class="sky-form-group">
+            <label class="sky-label" for="date-picker">調べたい日付（あなたの現地時間）</label>
+            <input type="date" id="date-picker" class="sky-input" onchange="calculateByDate()">
+        </div>
+
+        <div id="date-result" class="sky-result-card">
+            </div>
+    </div>
+
+    <div id="location-tab" class="sky-section">
+        <div class="sky-form-group">
+            <label class="sky-label" for="realm-select">地方（エリア）</label>
+            <select id="realm-select" class="sky-select" onchange="updateLocationOptions()">
+                <option value="0">草原 (Daylight Prairie)</option>
+                <option value="1">雨林 (Hidden Forest)</option>
+                <option value="2">渓谷 (Valley of Triumph)</option>
+                <option value="3">暮土 (Golden Wasteland)</option>
+                <option value="4">書庫 (Vault of Knowledge)</option>
+            </select>
+        </div>
+
+        <div class="sky-form-group">
+            <label class="sky-label" for="location-select">詳細な出現場所</label>
+            <select id="location-select" class="sky-select" onchange="calculateByLocation()">
+                </select>
+        </div>
+
+        <div id="location-result" class="sky-result-card is-red">
+            </div>
+    </div>
+</div>
+
+<script>
+    // シャードのデータベース（PlutoyDevの報酬割り当てに準拠）
+    const shardDatabase = {
+        0: {
+            name: "草原 (Daylight Prairie)",
+            locations: [
+                { name: "鳥の巣", candles: 2.0, isRed: true, note: "強闇（赤）。アクティビティ完了で星のキャンドルを獲得。" },
+                { name: "洞窟", candles: 2.0, isRed: true, note: "強闇（赤）。アクティビティ完了で星のキャンドルを獲得。" },
+                { name: "楽園の島々（汚染された間欠泉周辺）", candles: 3.5, isRed: true, note: "強闇（赤）。難易度が高めですが、最高効率の3.5本を獲得！" }
+            ]
+        },
+        1: {
+            name: "雨林 (Hidden Forest)",
+            locations: [
+                { name: "大樹の沼地 / 境界の地 (ツリーハウス)", candles: 2.5, isRed: true, note: "強闇（赤）。アクティビティ完了で星のキャンドルを獲得。" },
+                { name: "晴れ間 / 高台の広場", candles: 2.5, isRed: true, note: "強闇（赤）。アクティビティ完了で星のキャンドルを獲得。" },
+                { name: "地下洞窟", candles: 3.5, isRed: true, note: "強闇（赤）。雨林奥深くのエリア。最高効率の3.5本を獲得！" }
+            ]
+        },
+        2: {
+            name: "渓谷 (Valley of Triumph)",
+            locations: [
+                { name: "スケートリンク / 氷の湖", candles: 2.5, isRed: true, note: "強闇（赤）。アクティビティ完了で星のキャンドルを獲得。" },
+                { name: "夢の町", candles: 2.5, isRed: true, note: "強闇（赤）。アクティビティ完了で星のキャンドルを獲得。" },
+                { name: "隠者の峠", candles: 3.5, isRed: true, note: "強闇（赤）。山頂の隠者の家周辺。最高効率の3.5本を獲得！" }
+            ]
+        },
+        3: {
+            name: "暮土 (Golden Wasteland)",
+            locations: [
+                { name: "忘却の荒地 (方舟)", candles: 2.5, isRed: true, note: "強闇（赤）。アクティビティ完了で星のキャンドルを獲得。" },
+                { name: "墓所", candles: 2.5, isRed: true, note: "強闇（赤）。エビ（暗黒竜）に注意してください。" },
+                { name: "巨大な温室 / 難破船", candles: 3.5, isRed: true, note: "強闇（赤）。難易度が高いですが、最高効率の3.5本を獲得！" },
+                { name: "戦場", candles: 3.5, isRed: true, note: "強闇（赤）。城門前の広いエリア。最高効率の3.5本を獲得！" }
+            ]
+        },
+        4: {
+            name: "書庫 (Vault of Knowledge)",
+            locations: [
+                { name: "星の砂漠", candles: 3.5, isRed: true, note: "強闇（赤）。コラボエリア。最高効率の3.5本を獲得！" },
+                { name: "君主の隠れ家 / クラゲの入り江", candles: 3.5, isRed: true, note: "強闇（赤）。書庫のサブエリア。最高効率의 3.5本を獲得！" }
+            ]
+        }
+    };
+
+    // タブ切り替えロジック
+    function switchSkyTab(tabId) {
+        document.querySelectorAll('.sky-tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.sky-section').forEach(sec => sec.classList.remove('active'));
+        
+        if (tabId === 'date-tab') {
+            document.querySelectorAll('.sky-tab-btn')[0].classList.add('active');
+            document.getElementById('date-tab').classList.add('active');
+        } else {
+            document.querySelectorAll('.sky-tab-btn')[1].classList.add('active');
+            document.getElementById('location-tab').classList.add('active');
+        }
+    }
+
+    // 米国太平洋時間（LA時間）の日付詳細を取得する関数
+    function getSkyTimeDetails(userDateInput) {
+        let targetDate;
+        if (userDateInput) {
+            // ユーザーが選択した日付の正午(12:00)ベースでオブジェクトを作成し、タイムゾーンのズレを最小化
+            targetDate = new Date(userDateInput + "T12:00:00");
+        } else {
+            targetDate = new Date();
+        }
+
+        // アメリカ/ロサンゼルス時間（Sky標準時間）の文字列に変換
+        const laString = targetDate.toLocaleString("en-US", { timeZone: "America/Los_Angeles" });
+        const laDate = new Date(laString);
+
+        return {
+            year: laDate.getFullYear(),
+            month: laDate.getMonth() + 1,
+            day: laDate.getDate(),
+            weekday: laDate.getDay() // 0: 日, 1: 月...
+        };
+    }
+
+    // 1. 日付ベースの予測計算
+    function calculateByDate() {
+        const dateInput = document.getElementById('date-picker').value;
+        const skyTime = getSkyTimeDetails(dateInput);
+
+        // PlutoyDev/sky-shards の基本ロジック
+        // 1. 色の判定: 日付が「奇数」なら赤（強闇）、「偶数」なら黒（普通闇）
+        const isRedShard = (skyTime.day % 2 !== 0);
+        
+        // 2. 地方の判定: (日 - 1) % 5
+        const realmIndex = (skyTime.day - 1) % 5;
+        const realmInfo = shardDatabase[realmIndex];
+
+        let html = `
+            <div class="sky-res-row">
+                <span class="sky-label">対象（Sky標準時間）</span>
+                <span class="sky-res-val">${skyTime.year}年${skyTime.month}月${skyTime.day}日</span>
+            </div>
+            <div class="sky-res-row">
+                <span class="sky-label">シャードの種類</span>
+                <span class="sky-res-val">
+                    ${isRedShard ? '<span class="sky-badge-red">🔴 赤い闇（強闇）</span>' : '<span class="sky-badge-black">⚫ 黒い闇（普通闇）</span>'}
+                </span>
+            </div>
+            <div class="sky-res-row">
+                <span class="sky-label">出現する地方</span>
+                <span class="sky-res-val" style="color: var(--accent-gold);">${realmInfo.name}</span>
+            </div>
+        `;
+
+        if (isRedShard) {
+            html += `
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+                    <span class="sky-label">🔮 本日の赤闇候補と星キャン獲得量:</span>
+                    <ul class="location-list">
+            `;
+            realmInfo.locations.forEach(loc => {
+                html += `<li><strong>${loc.name}</strong>: <span style="color:var(--accent-gold); font-weight:bold;">${loc.candles.toFixed(1)}本</span></li>`;
+            });
+            html += `
+                    </ul>
+                </div>
+                <div class="sky-info-text">
+                    ※赤闇（強闇）をクリアすると、原初の記憶へ案内され、上記の数の<strong>星のキャンドル</strong>を獲得できます。実際の出現場所は上記候補のいずれか1箇所にランダムまたは周期で決定されます。
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="sky-info-text" style="border-left: 3px solid var(--text-muted);">
+                    ※本日は「黒い闇（普通闇）」の日です。クリアしても星のキャンドルは貰えませんが、通常の<strong>キャンドル光粒（光の欠片）</strong>が手に入ります。
+                </div>
+            `;
+        }
+
+        const resultCard = document.getElementById('date-result');
+        resultCard.innerHTML = html;
+        
+        // クラスの切り替えで左ボーダーの色を変更
+        if (isRedShard) {
+            resultCard.className = "sky-result-card is-red";
+        } else {
+            resultCard.className = "sky-result-card is-black";
+        }
+    }
+
+    // 2. 場所ベースの計算
+    function updateLocationOptions() {
+        const realmIndex = document.getElementById('realm-select').value;
+        const locations = shardDatabase[realmIndex].locations;
+        const locSelect = document.getElementById('location-select');
+        
+        locSelect.innerHTML = "";
+        locations.forEach((loc, index) => {
+            const opt = document.createElement('option');
+            opt.value = index;
+            opt.textContent = loc.name;
+            locSelect.appendChild(opt);
+        });
+
+        calculateByLocation();
+    }
+
+    function calculateByLocation() {
+        const realmIndex = document.getElementById('realm-select').value;
+        const locIndex = document.getElementById('location-select').value;
+        
+        if (locIndex === "") return;
+        
+        const locationData = shardDatabase[realmIndex].locations[locIndex];
+
+        let html = `
+            <div class="sky-res-row">
+                <span class="sky-label">選択した場所</span>
+                <span class="sky-res-val">${locationData.name}</span>
+            </div>
+            <div class="sky-res-row">
+                <span class="sky-label">シャード属性</span>
+                <span class="sky-res-val"><span class="sky-badge-red">強闇 (赤)</span></span>
+            </div>
+            <div class="sky-res-row" style="margin-top: 10px;">
+                <span class="sky-label">星のキャンドル報酬量</span>
+                <span class="sky-candle-badge">🕯️ ${locationData.candles.toFixed(1)} 本</span>
+            </div>
+            <div class="sky-info-text" style="margin-top: 15px; background-color: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.1);">
+                ${locationData.note}
+            </div>
+        `;
+
+        document.getElementById('location-result').innerHTML = html;
+    }
+
+    // 初期化処理
+    window.addEventListener('DOMContentLoaded', () => {
+        // 1. 本日の日付をLA時間ベースで取得して設定
+        const skyTime = getSkyTimeDetails();
+        const yyyy = skyTime.year;
+        const mm = String(skyTime.month).padStart(2, '0');
+        const dd = String(skyTime.day).padStart(2, '0');
+        
+        document.getElementById('date-picker').value = `${yyyy}-${mm}-${dd}`;
+        
+        // 2. 初期計算を実行
+        calculateByDate();
+        updateLocationOptions();
+    });
+</script>
+
+</body>
+</html>
