@@ -245,6 +245,117 @@
     line-height: 1.6;
   }
 
+  .note a { color: var(--gold-light); }
+
+  .predict-box {
+    margin-top: 16px;
+    padding: 15px 15px 4px;
+    border-radius: 16px;
+    background: rgba(196,87,75,0.08);
+    border: 1px solid rgba(196,87,75,0.22);
+  }
+
+  .predict-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .predict-title {
+    font-size: 13.5px;
+    color: var(--crimson-light);
+  }
+
+  .predict-range {
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  .predict-list {
+    max-height: 210px;
+    overflow-y: auto;
+    margin: 0 0 12px;
+    padding-right: 2px;
+  }
+  .predict-list::-webkit-scrollbar { width: 5px; }
+  .predict-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+  .predict-day { margin-bottom: 10px; }
+  .predict-day:last-child { margin-bottom: 0; }
+
+  .predict-day-head {
+    font-size: 12.5px;
+    color: var(--cream);
+    font-weight: 700;
+    margin-bottom: 3px;
+  }
+  .predict-day-head .realm-tag {
+    color: var(--gold-light);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+
+  .predict-occ {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.9;
+    padding-left: 2px;
+  }
+  .predict-occ .t {
+    color: var(--crimson-light);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .predict-empty {
+    font-size: 12.5px;
+    color: var(--text-dim);
+    padding: 4px 0 8px;
+  }
+
+  .predict-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 0;
+    border-top: 1px dashed rgba(255,255,255,0.16);
+  }
+
+  .predict-count { font-size: 13px; color: var(--cream); }
+  .predict-count strong {
+    font-family: 'Kaisei Decol', serif;
+    font-size: 19px;
+    color: var(--crimson-light);
+    margin: 0 2px;
+  }
+
+  .predict-apply {
+    border: none;
+    border-radius: 10px;
+    padding: 9px 15px;
+    font-family: 'Zen Maru Gothic', sans-serif;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--indigo);
+    background: linear-gradient(160deg, var(--gold-light), var(--gold));
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s, opacity .15s;
+    white-space: nowrap;
+  }
+  .predict-apply:hover { box-shadow: 0 4px 14px rgba(245,181,76,0.4); }
+  .predict-apply:active { transform: scale(0.96); }
+  .predict-apply:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
+
+  .predict-applied-msg {
+    font-size: 11.5px;
+    color: var(--gold-light);
+    margin: -4px 0 10px;
+    text-align: right;
+  }
+
   .result-card { text-align: center; border-color: rgba(245,181,76,0.28); }
 
   .gauge-wrap {
@@ -451,6 +562,20 @@
       </div>
     </div>
     <p class="note">赤闇が降るタイミングは不定期です。実際の獲得ペースに合わせて調整してください。</p>
+
+    <div class="predict-box">
+      <div class="predict-head">
+        <span class="predict-title">🔮 赤闇の自動予測(β)</span>
+        <span class="predict-range" id="predictRange"></span>
+      </div>
+      <div class="predict-list" id="predictList"></div>
+      <div class="predict-summary">
+        <span class="predict-count">予測回数 <strong id="predictTotal">0</strong>回</span>
+        <button type="button" class="predict-apply" id="predictApplyBtn">獲得回数に反映</button>
+      </div>
+      <p class="predict-applied-msg" id="predictAppliedMsg" style="display:none;">✓ 獲得回数(週)に反映しました</p>
+      <p class="note">コミュニティ観測による非公式の推測ルールです。実際とズレる場合があります。理論上出現する回数なので、実際に参加できる回数に合わせて調整してください。正確な時刻は <a href="https://sky-shards.pages.dev" target="_blank" rel="noopener noreferrer">sky-shards.pages.dev</a> でも確認できます。</p>
+    </div>
   </section>
 
   <section class="card result-card">
@@ -571,6 +696,187 @@
   });
 
   update();
+
+  // ---- 赤闇(Red Shard)自動予測 ----
+  // コミュニティが観測データから逆算した非公式ルールに基づく実装。
+  // ①レルムは毎月1日を起点に5日周期でローテーション
+  // ②開始時刻/色は毎月1日を起点に12日周期でループ(奇数=赤/偶数=黒)
+  // ③時刻ごとに発生しない曜日がある
+  // ④レルム×時刻で着地場所が決まる
+  // 時刻はSkyサーバー基準のPT(America/Los_Angeles)として扱う。
+  var REALMS = ['プレーリー', 'フォレスト', 'バレー', 'ウェイストランド', 'ヴォールト'];
+  var CYCLE12 = [
+    { time: '7:40', color: 'red' },
+    { time: '2:10', color: 'black' },
+    { time: '2:20', color: 'red' },
+    { time: '1:50', color: 'black' },
+    { time: '3:30', color: 'red' },
+    { time: '2:10', color: 'black' },
+    { time: '7:40', color: 'red' },
+    { time: '1:50', color: 'black' },
+    { time: '2:20', color: 'red' },
+    { time: '2:10', color: 'black' },
+    { time: '3:30', color: 'red' },
+    { time: '1:50', color: 'black' }
+  ];
+  var SKIP_WEEKDAYS = { '1:50': [6, 0], '2:10': [0, 1], '7:40': [1, 2], '2:20': [2, 3], '3:30': [3, 4] };
+  var LOCATIONS = {
+    'プレーリー': { '1:50': 'Butterfly Field', '2:10': 'Village Islands', '7:40': 'Cave', '2:20': 'Bird Nest', '3:30': 'Sanctuary Island' },
+    'フォレスト': { '1:50': 'Forest Brook', '2:10': 'Boneyard', '7:40': 'Forest Garden', '2:20': 'Treehouse', '3:30': 'Elevated Clearing' },
+    'バレー': { '1:50': 'Ice Rink', '2:10': 'Ice Rink', '7:40': 'Village of Dreams', '2:20': 'Village of Dreams', '3:30': 'Hermit Valley' },
+    'ウェイストランド': { '1:50': 'Broken Temple', '2:10': 'Battlefield', '7:40': 'Graveyard', '2:20': 'Crabfield', '3:30': 'Forgotten Ark' },
+    'ヴォールト': { '1:50': 'Starlight Desert', '2:10': 'Starlight Desert', '7:40': 'Jellyfish Cove', '2:20': 'Jellyfish Cove', '3:30': 'Jellyfish Cove' }
+  };
+  var REPEAT_HOURS = { red: 6, black: 8 };
+  var JP_WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+  var LANDING_LAG_SEC = 8 * 60 + 40;
+
+  function getPTDateParts(date) {
+    var fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Los_Angeles',
+      year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'short'
+    });
+    var obj = {};
+    fmt.formatToParts(date).forEach(function (p) { if (p.type !== 'literal') obj[p.type] = p.value; });
+    var weekdayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    return {
+      year: parseInt(obj.year, 10),
+      month: parseInt(obj.month, 10),
+      day: parseInt(obj.day, 10),
+      weekday: weekdayMap[obj.weekday]
+    };
+  }
+
+  function getPTOffsetMinutes(refDate) {
+    var fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Los_Angeles', hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    var obj = {};
+    fmt.formatToParts(refDate).forEach(function (p) { if (p.type !== 'literal') obj[p.type] = p.value; });
+    var hour = obj.hour === '24' ? 0 : parseInt(obj.hour, 10);
+    var asUTC = Date.UTC(parseInt(obj.year, 10), parseInt(obj.month, 10) - 1, parseInt(obj.day, 10), hour, parseInt(obj.minute, 10), parseInt(obj.second, 10));
+    return Math.round((asUTC - refDate.getTime()) / 60000);
+  }
+
+  function ptWallClockToDate(year, month, day, hour, minute, offsetMinutes) {
+    var naiveUTCms = Date.UTC(year, month - 1, day, hour, minute, 0);
+    return new Date(naiveUTCms - offsetMinutes * 60000);
+  }
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+
+  function getDaySchedule(dayOfMonth, weekday) {
+    var realm = REALMS[(dayOfMonth - 1) % 5];
+    var slot = CYCLE12[(dayOfMonth - 1) % 12];
+    var skipList = SKIP_WEEKDAYS[slot.time] || [];
+    return { realm: realm, time: slot.time, color: slot.color, skipped: skipList.indexOf(weekday) !== -1 };
+  }
+
+  function getOccurrenceMinutes(startTime, color) {
+    var hm = startTime.split(':');
+    var startMin = parseInt(hm[0], 10) * 60 + parseInt(hm[1], 10);
+    var interval = REPEAT_HOURS[color] * 60;
+    var list = [];
+    for (var t = startMin; t < 24 * 60; t += interval) list.push(t);
+    return list;
+  }
+
+  function buildRedForecast(daysAhead) {
+    var now = new Date();
+    var offset = getPTOffsetMinutes(now);
+    var windowEnd = now.getTime() + daysAhead * 86400000;
+    var seenDays = {};
+    var byDay = [];
+
+    for (var i = -1; i <= daysAhead; i++) {
+      var probe = new Date(now.getTime() + i * 86400000);
+      var pt = getPTDateParts(probe);
+      var dayKey = pt.year + '-' + pt.month + '-' + pt.day;
+      if (seenDays[dayKey]) continue;
+      seenDays[dayKey] = true;
+
+      var sched = getDaySchedule(pt.day, pt.weekday);
+      if (sched.color !== 'red' || sched.skipped) continue;
+
+      var location = (LOCATIONS[sched.realm] || {})[sched.time] || '?';
+      var entries = [];
+
+      getOccurrenceMinutes(sched.time, 'red').forEach(function (mins) {
+        var h = Math.floor(mins / 60);
+        var m = mins % 60;
+        var occDate = ptWallClockToDate(pt.year, pt.month, pt.day, h, m, offset);
+        if (occDate.getTime() >= now.getTime() && occDate.getTime() <= windowEnd) {
+          var landingSec = mins * 60 + LANDING_LAG_SEC;
+          var lh = Math.floor(landingSec / 3600) % 24;
+          var lm = Math.floor((landingSec % 3600) / 60);
+          entries.push({
+            date: occDate,
+            gateLabel: pad2(h) + ':' + pad2(m),
+            landLabel: pad2(lh) + ':' + pad2(lm)
+          });
+        }
+      });
+
+      if (entries.length > 0) {
+        byDay.push({
+          ptLabel: pt.month + '/' + pt.day + '(' + JP_WEEKDAYS[pt.weekday] + ')',
+          realm: sched.realm,
+          location: location,
+          entries: entries
+        });
+      }
+    }
+
+    byDay.sort(function (a, b) { return a.entries[0].date - b.entries[0].date; });
+    return byDay;
+  }
+
+  function renderForecast() {
+    var forecast = buildRedForecast(7);
+    var total = 0;
+    var html = '';
+
+    if (forecast.length === 0) {
+      html = '<p class="predict-empty">今後7日間、赤闇の予測はありません。</p>';
+    } else {
+      forecast.forEach(function (day) {
+        html += '<div class="predict-day">';
+        html += '<div class="predict-day-head">' + day.ptLabel + '<span class="realm-tag">' + day.realm + '・' + day.location + '</span></div>';
+        html += '<div class="predict-occ">';
+        day.entries.forEach(function (e) {
+          total += 1;
+          html += '<span class="t">' + e.gateLabel + '</span> PT <span style="opacity:.7;">(着地 ' + e.landLabel + ')</span><br>';
+        });
+        html += '</div></div>';
+      });
+    }
+
+    document.getElementById('predictList').innerHTML = html;
+    document.getElementById('predictTotal').textContent = total;
+    document.getElementById('predictRange').textContent = '今後7日間・PT基準';
+
+    var applyBtn = document.getElementById('predictApplyBtn');
+    applyBtn.setAttribute('data-count', total);
+    applyBtn.disabled = total === 0;
+    document.getElementById('predictAppliedMsg').style.display = 'none';
+  }
+
+  document.getElementById('predictApplyBtn').addEventListener('click', function () {
+    try {
+      var count = parseInt(this.getAttribute('data-count'), 10) || 0;
+      els.shardCount.value = count;
+      update();
+      document.getElementById('predictAppliedMsg').style.display = 'block';
+    } catch (err) { /* no-op */ }
+  });
+
+  try {
+    renderForecast();
+  } catch (err) {
+    document.getElementById('predictList').innerHTML = '<p class="predict-empty">予測の計算中にエラーが発生しました。</p>';
+  }
 })();
 </script>
 </body>
