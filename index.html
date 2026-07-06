@@ -291,6 +291,12 @@
     color: var(--cream);
     font-weight: 700;
     margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    row-gap: 3px;
+    gap: 8px;
   }
   .predict-day-head .realm-tag {
     color: var(--gold-light);
@@ -304,13 +310,13 @@
     line-height: 1.9;
     padding-left: 2px;
   }
-  .predict-occ .t {
+  .predict-occ .land-mini {
     color: var(--crimson-light);
     font-variant-numeric: tabular-nums;
     font-weight: 600;
   }
   .predict-occ .arrow-mini { color: var(--text-dim); font-size: 9px; margin: 0 1px; }
-  .predict-occ .land-mini {
+  .predict-occ .end-mini {
     color: var(--gold-light);
     font-variant-numeric: tabular-nums;
   }
@@ -323,6 +329,15 @@
     padding: 14px 16px 12px;
     margin-bottom: 14px;
   }
+  .predict-next-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    row-gap: 6px;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
   .predict-next-badge {
     display: inline-block;
     font-size: 10.5px;
@@ -331,7 +346,27 @@
     background: rgba(196,87,75,0.2);
     border-radius: 999px;
     padding: 3px 10px;
-    margin-bottom: 8px;
+  }
+  .predict-check {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .predict-check input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--gold);
+    cursor: pointer;
+  }
+  .predict-next.is-checked,
+  .predict-day.is-checked {
+    opacity: 0.5;
   }
   .predict-next-date {
     font-family: 'Kaisei Decol', serif;
@@ -363,7 +398,7 @@
     border-radius: 6px;
   }
   .predict-next-time-row:nth-child(odd) { background: rgba(255,255,255,0.035); }
-  .predict-next-time-row .gate {
+  .predict-next-time-row .land {
     width: 58px;
     font-size: 17px;
     font-weight: 700;
@@ -371,7 +406,7 @@
     font-variant-numeric: tabular-nums;
   }
   .predict-next-time-row .arrow { color: var(--text-dim); font-size: 13px; }
-  .predict-next-time-row .land {
+  .predict-next-time-row .end {
     width: 58px;
     font-size: 15px;
     font-weight: 600;
@@ -848,6 +883,25 @@
   var REPEAT_HOURS = { red: 6, black: 8 };
   var JP_WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
   var LANDING_LAG_SEC = 8 * 60 + 40;
+  var END_LAG_SEC = 4 * 60 * 60; // 終了時刻 = 着地から4時間後
+  var CHECKED_STORAGE_KEY = 'skyStarCandleCalc_checkedDays_v1';
+
+  function loadCheckedDays() {
+    try {
+      var raw = window.localStorage.getItem(CHECKED_STORAGE_KEY);
+      if (!raw) return {};
+      var obj = JSON.parse(raw);
+      return (obj && typeof obj === 'object') ? obj : {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function saveCheckedDays(obj) {
+    try {
+      window.localStorage.setItem(CHECKED_STORAGE_KEY, JSON.stringify(obj));
+    } catch (err) { /* storage unavailable - ignore */ }
+  }
 
   function getPTDateParts(date) {
     var fmt = new Intl.DateTimeFormat('en-US', {
@@ -929,16 +983,20 @@
           var landingSec = mins * 60 + LANDING_LAG_SEC;
           var lh = Math.floor(landingSec / 3600) % 24;
           var lm = Math.floor((landingSec % 3600) / 60);
+          var endSec = landingSec + END_LAG_SEC;
+          var eh = Math.floor(endSec / 3600) % 24;
+          var em = Math.floor((endSec % 3600) / 60);
           entries.push({
             date: occDate,
-            gateLabel: pad2(h) + ':' + pad2(m),
-            landLabel: pad2(lh) + ':' + pad2(lm)
+            landLabel: pad2(lh) + ':' + pad2(lm),
+            endLabel: pad2(eh) + ':' + pad2(em)
           });
         }
       });
 
       if (entries.length > 0) {
         byDay.push({
+          dayKey: dayKey,
           ptLabel: pt.month + '/' + pt.day + '(' + JP_WEEKDAYS[pt.weekday] + ')',
           realm: sched.realm,
           location: location,
@@ -952,12 +1010,25 @@
     return byDay;
   }
 
+  function checkboxHtml(dayKey, reward, checked) {
+    return '<label class="predict-check"><input type="checkbox" class="day-check" data-day-key="' + dayKey + '" data-reward="' + reward + '"' + (checked ? ' checked' : '') + '><span>獲得済み</span></label>';
+  }
+
   function renderForecast() {
     var forecast = buildRedForecast(7);
     // 1日に浄化できる報酬は1回までなので、日数=獲得回数。本数は着地場所ごとの最大値を積算した目安。
     var days = forecast.length;
     var totalCandles = 0;
     var html = '';
+
+    var checkedDays = loadCheckedDays();
+    var validKeys = {};
+    forecast.forEach(function (day) { validKeys[day.dayKey] = true; });
+    var pruned = false;
+    Object.keys(checkedDays).forEach(function (key) {
+      if (!validKeys[key]) { delete checkedDays[key]; pruned = true; }
+    });
+    if (pruned) saveCheckedDays(checkedDays);
 
     if (forecast.length === 0) {
       html = '<p class="predict-empty">今後7日間、赤闇の予測はありません。</p>';
@@ -966,25 +1037,33 @@
 
       var nextDay = forecast[0];
       var restDays = forecast.slice(1);
+      var nextChecked = !!checkedDays[nextDay.dayKey];
 
-      html += '<div class="predict-next">';
+      html += '<div class="predict-next' + (nextChecked ? ' is-checked' : '') + '">';
+      html += '<div class="predict-next-top">';
       html += '<span class="predict-next-badge">次の赤闇まで</span>';
+      html += checkboxHtml(nextDay.dayKey, nextDay.maxReward || 0, nextChecked);
+      html += '</div>';
       html += '<div class="predict-next-date">' + nextDay.ptLabel + '</div>';
       html += '<div class="predict-next-place">' + nextDay.realm + '・' + nextDay.location + (nextDay.maxReward ? '・最大' + nextDay.maxReward + '本' : '') + '</div>';
-      html += '<div class="predict-next-times-header"><span>ゲート</span><span>着地</span></div>';
+      html += '<div class="predict-next-times-header"><span>着地</span><span>終了</span></div>';
       nextDay.entries.forEach(function (e) {
-        html += '<div class="predict-next-time-row"><span class="gate">' + e.gateLabel + '</span><span class="arrow">→</span><span class="land">' + e.landLabel + '</span></div>';
+        html += '<div class="predict-next-time-row"><span class="land">' + e.landLabel + '</span><span class="arrow">→</span><span class="end">' + e.endLabel + '</span></div>';
       });
       html += '<p class="predict-next-note">PT基準・いずれか1回で報酬確定</p>';
       html += '</div>';
 
       if (restDays.length > 0) {
         restDays.forEach(function (day) {
-          html += '<div class="predict-day">';
-          html += '<div class="predict-day-head">' + day.ptLabel + '<span class="realm-tag">' + day.realm + '・' + day.location + (day.maxReward ? '・最大' + day.maxReward + '本' : '') + '</span></div>';
+          var dChecked = !!checkedDays[day.dayKey];
+          html += '<div class="predict-day' + (dChecked ? ' is-checked' : '') + '">';
+          html += '<div class="predict-day-head">';
+          html += '<span>' + day.ptLabel + '<span class="realm-tag">' + day.realm + '・' + day.location + (day.maxReward ? '・最大' + day.maxReward + '本' : '') + '</span></span>';
+          html += checkboxHtml(day.dayKey, day.maxReward || 0, dChecked);
+          html += '</div>';
           html += '<div class="predict-occ">候補 ';
           html += day.entries.map(function (e) {
-            return '<span class="t">' + e.gateLabel + '</span><span class="arrow-mini">→</span><span class="land-mini">' + e.landLabel + '</span>';
+            return '<span class="land-mini">' + e.landLabel + '</span><span class="arrow-mini">→</span><span class="end-mini">' + e.endLabel + '</span>';
           }).join('・');
           html += ' PT<span style="opacity:.7;">・いずれか1回</span></div>';
           html += '</div>';
@@ -1016,6 +1095,33 @@
       update();
       saveState();
       document.getElementById('predictAppliedMsg').style.display = 'block';
+    } catch (err) { /* no-op */ }
+  });
+
+  // 「獲得済み」チェック:チェックした日の最大獲得本数を所持本数に加算し、外すと減算する。
+  // イベント委譲にしているため、renderForecast()が予測リストを再描画しても再登録は不要。
+  document.getElementById('predictList').addEventListener('change', function (ev) {
+    var cb = ev.target.closest ? ev.target.closest('.day-check') : null;
+    if (!cb) return;
+    try {
+      var key = cb.getAttribute('data-day-key');
+      var reward = parseFloat(cb.getAttribute('data-reward')) || 0;
+      var current = Math.max(0, parseFloat(els.current.value) || 0);
+      var checkedDays = loadCheckedDays();
+      var updated;
+      if (cb.checked) {
+        updated = current + reward;
+        checkedDays[key] = true;
+      } else {
+        updated = Math.max(0, current - reward);
+        delete checkedDays[key];
+      }
+      els.current.value = Math.round(updated * 100) / 100;
+      saveCheckedDays(checkedDays);
+      update();
+      saveState();
+      var container = cb.closest('.predict-next, .predict-day');
+      if (container) container.classList.toggle('is-checked', cb.checked);
     } catch (err) { /* no-op */ }
   });
 
