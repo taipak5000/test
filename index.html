@@ -833,7 +833,7 @@
   var REPEAT_HOURS = { red: 6, black: 8 };
   var JP_WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
   var LANDING_LAG_SEC = 8 * 60 + 40;
-  var END_LAG_SEC = 4 * 60 * 60; // 終了時刻 = 着地から4時間後
+  var END_LAG_SEC = 4 * 60 * 60; // 終了時刻 = 出現(ゲート)時刻から4時間後(着地時刻からではない)
   var CHECKED_STORAGE_KEY = 'skyStarCandleCalc_checkedDays_v1';
 
   function loadCheckedDays() {
@@ -900,8 +900,10 @@
     var hm = startTime.split(':');
     var startMin = parseInt(hm[0], 10) * 60 + parseInt(hm[1], 10);
     var interval = REPEAT_HOURS[color] * 60;
+    // ルール上、1日の発生回数は常に3回。24時到達で打ち切る方式だと2:20/3:30始まりの
+    // 日だけ余分な4回目(20:20/21:30)が発生してしまうため、回数で区切る。
     var list = [];
-    for (var t = startMin; t < 24 * 60; t += interval) list.push(t);
+    for (var i = 0; i < 3; i++) list.push(startMin + i * interval);
     return list;
   }
 
@@ -933,7 +935,7 @@
           var landingSec = mins * 60 + LANDING_LAG_SEC;
           var lh = Math.floor(landingSec / 3600) % 24;
           var lm = Math.floor((landingSec % 3600) / 60);
-          var endSec = landingSec + END_LAG_SEC;
+          var endSec = mins * 60 + END_LAG_SEC;
           var eh = Math.floor(endSec / 3600) % 24;
           var em = Math.floor((endSec % 3600) / 60);
           entries.push({
