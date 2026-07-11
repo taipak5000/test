@@ -400,6 +400,8 @@
   .predict-next-time-row:nth-child(odd) { background: rgba(255,255,255,0.035); }
   .predict-next-time-row .land {
     width: 58px;
+    display: flex;
+    flex-direction: column;
     font-size: 17px;
     font-weight: 700;
     color: var(--cream);
@@ -408,10 +410,18 @@
   .predict-next-time-row .arrow { color: var(--text-dim); font-size: 13px; }
   .predict-next-time-row .end {
     width: 58px;
+    display: flex;
+    flex-direction: column;
     font-size: 15px;
     font-weight: 600;
     color: var(--gold-light);
     font-variant-numeric: tabular-nums;
+  }
+  .predict-next-time-row .date-mini {
+    font-size: 9.5px;
+    font-weight: 400;
+    color: var(--text-dim);
+    line-height: 1.4;
   }
   .predict-next-note {
     font-size: 11.5px;
@@ -889,6 +899,28 @@
 
   function pad2(n) { return String(n).padStart(2, '0'); }
 
+  // 着地・終了の各時刻を日本時間(JST)で表示するためのラベルを作る。
+  // PT基準で計算した「同じ日」のグループでも、+16時間(PDT時)のズレにより
+  // 2回目・3回目の候補や終了時刻が日をまたいで翌日になることがあるため、
+  // 表示用に日付ラベル(dateLabel/shortDate)も個別に持たせる。
+  function jstLabel(date) {
+    var fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Tokyo', hour12: false,
+      year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'short',
+      hour: '2-digit', minute: '2-digit'
+    });
+    var obj = {};
+    fmt.formatToParts(date).forEach(function (p) { if (p.type !== 'literal') obj[p.type] = p.value; });
+    var weekdayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    var hour = obj.hour === '24' ? 0 : parseInt(obj.hour, 10);
+    return {
+      dateKey: obj.year + '-' + obj.month + '-' + obj.day,
+      dateLabel: obj.month + '/' + obj.day + '(' + JP_WEEKDAYS[weekdayMap[obj.weekday]] + ')',
+      shortDate: obj.month + '/' + obj.day,
+      timeLabel: pad2(hour) + ':' + pad2(parseInt(obj.minute, 10))
+    };
+  }
+
   function getDaySchedule(dayOfMonth, weekday) {
     var realm = REALMS[(dayOfMonth - 1) % 5];
     var slot = CYCLE12[(dayOfMonth - 1) % 12];
@@ -930,18 +962,21 @@
       getOccurrenceMinutes(sched.time, 'red').forEach(function (mins) {
         var h = Math.floor(mins / 60);
         var m = mins % 60;
-        var occDate = ptWallClockToDate(pt.year, pt.month, pt.day, h, m, offset);
-        if (occDate.getTime() >= now.getTime() && occDate.getTime() <= windowEnd) {
-          var landingSec = mins * 60 + LANDING_LAG_SEC;
-          var lh = Math.floor(landingSec / 3600) % 24;
-          var lm = Math.floor((landingSec % 3600) / 60);
-          var endSec = mins * 60 + END_LAG_SEC;
-          var eh = Math.floor(endSec / 3600) % 24;
-          var em = Math.floor((endSec % 3600) / 60);
+        var gateDate = ptWallClockToDate(pt.year, pt.month, pt.day, h, m, offset);
+        if (gateDate.getTime() >= now.getTime() && gateDate.getTime() <= windowEnd) {
+          var landingDate = new Date(gateDate.getTime() + LANDING_LAG_SEC * 1000);
+          var endDate = new Date(gateDate.getTime() + END_LAG_SEC * 1000);
+          var land = jstLabel(landingDate);
+          var end = jstLabel(endDate);
           entries.push({
-            date: occDate,
-            landLabel: pad2(lh) + ':' + pad2(lm),
-            endLabel: pad2(eh) + ':' + pad2(em)
+            date: gateDate,
+            landDateKey: land.dateKey,
+            landDateLabel: land.dateLabel,
+            landShortDate: land.shortDate,
+            landLabel: land.timeLabel,
+            endDateKey: end.dateKey,
+            endShortDate: end.shortDate,
+            endLabel: end.timeLabel
           });
         }
       });
@@ -949,7 +984,7 @@
       if (entries.length > 0) {
         byDay.push({
           dayKey: dayKey,
-          ptLabel: pt.month + '/' + pt.day + '(' + JP_WEEKDAYS[pt.weekday] + ')',
+          dateLabel: entries[0].landDateLabel,
           realm: sched.realm,
           location: location,
           maxReward: (REWARD_MAX[sched.realm] || {})[sched.time] || null,
@@ -996,13 +1031,17 @@
       html += '<span class="predict-next-badge">次の赤闇まで</span>';
       html += checkboxHtml(nextDay.dayKey, nextDay.maxReward || 0, nextChecked);
       html += '</div>';
-      html += '<div class="predict-next-date">' + nextDay.ptLabel + '</div>';
+      html += '<div class="predict-next-date">' + nextDay.dateLabel + '</div>';
       html += '<div class="predict-next-place">' + nextDay.realm + '・' + nextDay.location + (nextDay.maxReward ? '・最大' + nextDay.maxReward + '本' : '') + '</div>';
       html += '<div class="predict-next-times-header"><span>着地</span><span>終了</span></div>';
       nextDay.entries.forEach(function (e) {
-        html += '<div class="predict-next-time-row"><span class="land">' + e.landLabel + '</span><span class="arrow">→</span><span class="end">' + e.endLabel + '</span></div>';
+        html += '<div class="predict-next-time-row">' +
+          '<span class="land"><span class="date-mini">' + e.landShortDate + '</span><span>' + e.landLabel + '</span></span>' +
+          '<span class="arrow">→</span>' +
+          '<span class="end"><span class="date-mini">' + e.endShortDate + '</span><span>' + e.endLabel + '</span></span>' +
+          '</div>';
       });
-      html += '<p class="predict-next-note">PT基準・いずれか1回で報酬確定</p>';
+      html += '<p class="predict-next-note">日本時間(JST)基準・いずれか1回で報酬確定</p>';
       html += '</div>';
 
       if (restDays.length > 0) {
@@ -1010,14 +1049,14 @@
           var dChecked = !!checkedDays[day.dayKey];
           html += '<div class="predict-day' + (dChecked ? ' is-checked' : '') + '">';
           html += '<div class="predict-day-head">';
-          html += '<span>' + day.ptLabel + '<span class="realm-tag">' + day.realm + '・' + day.location + (day.maxReward ? '・最大' + day.maxReward + '本' : '') + '</span></span>';
+          html += '<span>' + day.dateLabel + '<span class="realm-tag">' + day.realm + '・' + day.location + (day.maxReward ? '・最大' + day.maxReward + '本' : '') + '</span></span>';
           html += checkboxHtml(day.dayKey, day.maxReward || 0, dChecked);
           html += '</div>';
           html += '<div class="predict-occ">候補 ';
           html += day.entries.map(function (e) {
-            return '<span class="land-mini">' + e.landLabel + '</span><span class="arrow-mini">→</span><span class="end-mini">' + e.endLabel + '</span>';
+            return '<span class="land-mini">' + e.landShortDate + ' ' + e.landLabel + '</span><span class="arrow-mini">→</span><span class="end-mini">' + e.endShortDate + ' ' + e.endLabel + '</span>';
           }).join('・');
-          html += ' PT<span style="opacity:.7;">・いずれか1回</span></div>';
+          html += '<span style="opacity:.7;"> JST・いずれか1回</span></div>';
           html += '</div>';
         });
       }
@@ -1027,7 +1066,7 @@
     document.getElementById('predictList').innerHTML = html;
     document.getElementById('predictDays').textContent = days;
     document.getElementById('predictTotalCandles').textContent = totalCandles;
-    document.getElementById('predictRange').textContent = '今後7日間・PT基準';
+    document.getElementById('predictRange').textContent = '今後7日間・日本時間(JST)基準';
   }
 
   // 「獲得済み」チェック:チェックした日の最大獲得本数を所持本数に加算し、外すと減算する。
