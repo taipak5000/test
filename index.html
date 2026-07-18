@@ -238,6 +238,82 @@
     gap: 12px;
   }
 
+  .toggle-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .toggle-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .toggle-title {
+    font-size: 14px;
+    color: var(--cream);
+    font-weight: 500;
+  }
+
+  .toggle-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 46px;
+    height: 26px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .switch input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .switch-track {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.14);
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    transition: background .2s, border-color .2s;
+    pointer-events: none;
+  }
+
+  .switch-thumb {
+    position: absolute;
+    left: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, var(--gold-light), var(--gold));
+    box-shadow: 0 2px 4px rgba(0,0,0,0.35);
+    transition: left .2s;
+  }
+
+  .switch input:checked ~ .switch-track {
+    background: rgba(245,181,76,0.4);
+    border-color: rgba(245,181,76,0.55);
+  }
+
+  .switch input:checked ~ .switch-track .switch-thumb { left: 22px; }
+
+  .switch input:focus-visible ~ .switch-track {
+    outline: 2px solid var(--gold-light);
+    outline-offset: 2px;
+  }
+
   .note {
     font-size: 12px;
     color: var(--text-dim);
@@ -817,6 +893,22 @@
     </div>
   </section>
 
+  <section class="card">
+    <h2>🥤 週の消費</h2>
+    <div class="field">
+      <div class="toggle-field">
+        <div class="toggle-text">
+          <span class="toggle-title">リサイズドリンクを毎週購入する</span>
+          <span class="toggle-sub">週1回・星のキャンドル8本で交換</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="buyDrink">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </label>
+      </div>
+    </div>
+  </section>
+
   <section class="card result-card">
     <h2 style="justify-content:center;">📊 結果</h2>
 
@@ -888,11 +980,14 @@
   sidebarCloseBtn.addEventListener('click', closeSidebar);
   sidebarOverlayEl.addEventListener('click', closeSidebar);
 
+  var RESIZE_DRINK_COST = 8; // リサイズドリンク: 週1回・星のキャンドル8本で購入
+
   var els = {
     target: document.getElementById('target'),
     current: document.getElementById('current'),
     feathers: document.getElementById('feathers'),
     feathersReadout: document.getElementById('feathersReadout'),
+    buyDrink: document.getElementById('buyDrink'),
     candleFill: document.getElementById('candleFill'),
     resultContent: document.getElementById('resultContent')
   };
@@ -905,7 +1000,8 @@
       var state = {
         target: els.target.value,
         current: els.current.value,
-        feathers: els.feathers.value
+        feathers: els.feathers.value,
+        buyDrink: els.buyDrink.checked
       };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (err) { /* storage unavailable - ignore */ }
@@ -918,6 +1014,7 @@
       if (state.target !== undefined) els.target.value = state.target;
       if (state.current !== undefined) els.current.value = state.current;
       if (state.feathers !== undefined) els.feathers.value = state.feathers;
+      if (state.buyDrink !== undefined) els.buyDrink.checked = !!state.buyDrink;
     } catch (err) { /* no saved data, corrupted data, or storage unavailable - ignore */ }
   }
 
@@ -935,9 +1032,11 @@
     var target = Math.max(0, parseFloat(els.target.value) || 0);
     var current = Math.max(0, parseFloat(els.current.value) || 0);
     var feathers = Math.max(0, Math.min(63, parseInt(els.feathers.value, 10) || 0));
+    var buyDrink = els.buyDrink.checked;
 
     var edenWeekly = feathers * 0.25;
-    var totalWeekly = edenWeekly;
+    var drinkWeekly = buyDrink ? RESIZE_DRINK_COST : 0;
+    var totalWeekly = edenWeekly - drinkWeekly;
 
     var sliderPct = (feathers / 63) * 100;
     els.feathers.style.setProperty('--fill', sliderPct + '%');
@@ -948,6 +1047,8 @@
 
     var remaining = target - current;
     var html = '';
+    var weeklyLine = '週あたり ' + fmt(totalWeekly) + '本' +
+      (drinkWeekly > 0 ? '　(羽 ' + fmt(edenWeekly) + '本 − リサイズドリンク ' + fmt(drinkWeekly) + '本)' : '');
 
     if (target <= 0) {
       html = '<p class="state-message">目標本数を入力すると、達成までの週数が表示されます。</p>';
@@ -956,9 +1057,12 @@
         '<p class="state-message achieved">🎉 目標本数を達成しています！</p>' +
         '<p class="breakdown">所持 ' + fmt(current) + '本 ／ 目標 ' + fmt(target) + '本</p>';
     } else if (totalWeekly <= 0) {
+      var warnMsg = drinkWeekly > 0
+        ? '週の収支がプラスにならないため、目標に到達できません。<br>羽の枚数か、リサイズドリンクの購入設定を見直してください。'
+        : '週の獲得本数が0本のため計算できません。<br>羽の枚数を見直してください。';
       html =
-        '<p class="state-message warning">週の獲得本数が0本のため計算できません。<br>羽の枚数を見直してください。</p>' +
-        '<p class="breakdown">残り ' + fmt(remaining) + '本</p>';
+        '<p class="state-message warning">' + warnMsg + '</p>' +
+        '<p class="breakdown">残り ' + fmt(remaining) + '本<br>' + weeklyLine + '</p>';
     } else {
       var weeksNeeded = Math.ceil(remaining / totalWeekly);
       var today = new Date();
@@ -968,7 +1072,7 @@
         '<p class="stat-line">達成予定日　<strong>' + jpDate(estDate) + '</strong>頃</p>' +
         '<p class="stat-line">残り　<strong>' + fmt(remaining) + '本</strong></p>' +
         '<p class="breakdown">' +
-          '週あたり ' + fmt(totalWeekly) + '本<br>' +
+          weeklyLine + '<br>' +
           '進捗 ' + Math.round(progressPct) + '%' +
         '</p>' +
         '<p class="note">※7日ごとの獲得ペースをもとにした目安です。実際の日付とは前後する場合があります。</p>';
@@ -977,7 +1081,7 @@
     els.resultContent.innerHTML = html;
   }
 
-  [els.target, els.current, els.feathers].forEach(function (el) {
+  [els.target, els.current, els.feathers, els.buyDrink].forEach(function (el) {
     el.addEventListener('input', function () {
       update();
       saveState();
