@@ -210,6 +210,30 @@
     border: 2px solid rgba(255,255,255,0.5);
   }
 
+  .add-current-btn {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px 14px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(160deg, var(--gold-light), var(--gold));
+    color: var(--indigo);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: filter 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+  }
+  .add-current-btn:hover { filter: brightness(1.08); }
+  .add-current-btn:active { transform: scale(0.98); }
+  .add-current-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: none;
+    transform: none;
+  }
+
   .divider {
     border: none;
     border-top: 1px dashed rgba(255,255,255,0.14);
@@ -922,6 +946,7 @@
         <span class="slider-readout" id="feathersReadout">63枚 = 15.75本</span>
       </div>
       <input type="range" id="feathers" min="0" max="63" step="1" value="63">
+      <button type="button" class="add-current-btn" id="addFeathersBtn">＋ 15.75本を所持本数に加算</button>
     </div>
 
     <hr class="divider">
@@ -1037,6 +1062,7 @@
     current: document.getElementById('current'),
     feathers: document.getElementById('feathers'),
     feathersReadout: document.getElementById('feathersReadout'),
+    addFeathersBtn: document.getElementById('addFeathersBtn'),
     buyDrink: document.getElementById('buyDrink'),
     candleFill: document.getElementById('candleFill'),
     resultContent: document.getElementById('resultContent')
@@ -1091,6 +1117,8 @@
     var sliderPct = (feathers / 63) * 100;
     els.feathers.style.setProperty('--fill', sliderPct + '%');
     els.feathersReadout.textContent = feathers + '枚 = ' + fmt(edenWeekly) + '本';
+    els.addFeathersBtn.textContent = '＋ ' + fmt(edenWeekly) + '本を所持本数に加算';
+    els.addFeathersBtn.disabled = edenWeekly <= 0;
 
     var progressPct = target > 0 ? Math.min(100, (current / target) * 100) : 0;
     els.candleFill.style.height = progressPct + '%';
@@ -1136,6 +1164,18 @@
       update();
       saveState();
     });
+  });
+
+  // 「＋◯本を所持本数に加算」ボタン:羽スライダーの換算本数(枚数×0.25)を
+  // 所持本数にそのまま加算する。何度でも押せる(週をまたいで複数回押す想定)。
+  els.addFeathersBtn.addEventListener('click', function () {
+    var feathers = Math.max(0, Math.min(63, parseInt(els.feathers.value, 10) || 0));
+    var edenWeekly = feathers * 0.25;
+    if (edenWeekly <= 0) return;
+    var current = Math.max(0, parseFloat(els.current.value) || 0);
+    els.current.value = Math.round((current + edenWeekly) * 100) / 100;
+    update();
+    saveState();
   });
 
   loadState();
